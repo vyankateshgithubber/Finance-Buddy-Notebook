@@ -1,1 +1,8 @@
 backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/.venv/bin
+backend/__pycache__/
+backend/__pycache__/agents.cpython-312.pyc
+backend/__pycache__/database.cpython-312.pyc
+backend/__pycache__/main.cpython-312.pyc

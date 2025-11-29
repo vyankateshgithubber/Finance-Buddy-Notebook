@@ -47,11 +47,14 @@ export function Chat() {
         setIsLoading(true)
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/chat", {
+            const response = await fetch("https://curly-waddle-p967j674vxwc6xr5-8000.app.github.dev/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: userMessage.content }),
-            })
+                body: JSON.stringify({ user_id: "1234", message: userMessage.content }),
+            }).catch((error) => {
+                console.error("Network error:", error)
+                throw error
+            });
 
             if (!response.ok) throw new Error("Failed to fetch response")
 

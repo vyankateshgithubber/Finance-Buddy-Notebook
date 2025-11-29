@@ -36,7 +36,7 @@ retry_config = types.HttpRetryOptions(
 root_agent = Agent(
     name="CategoryClassifier",
     model=Gemini(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash-lite", # Updated to latest flash-lite if available, or keep 1.5
         api_key=api_key,
         retry_options=retry_config
     ),
@@ -147,74 +147,78 @@ update_agent = Agent(
     tools=[read_sql_query_tool, execute_sql_update_tool],
     description="Updates categories, budgets, transactions, and debts in the database.",
     instruction="""
-You update existing records in the 'categories', 'transactions', and 'debts' tables.
+    You update existing records in the 'categories', 'transactions', and 'debts' tables.
 
-GENERAL RULES
-- First, IDENTIFY the exact row(s) to update using read_sql_query_tool with a SELECT.
-- Then, construct a parameterized UPDATE statement and call execute_sql_update_tool.
-- Always confirm back to the user what was changed.
-- Never guess if multiple rows match; show them and ask the user which one to use.
+    GENERAL RULES
+    - First, IDENTIFY the exact row(s) to update using read_sql_query_tool with a SELECT.
+    - Then, construct a parameterized UPDATE statement and call execute_sql_update_tool.
+    - Always confirm back to the user what was changed.
+    - Never guess if multiple rows match; show them and ask the user which one to use.
+    
+    SECURITY/CONTEXT NOTE: 
+    - You do not need to filter by 'user_id' in your SQL queries. The system automatically applies the user context to all database operations. 
+    - Just select/update based on logical fields like description, amount, date, etc.
 
-CATEGORIES / BUDGETS (table: categories)
-- If the user says "Change Dining budget to 5000":
-  1) SELECT id, name, budget FROM categories WHERE name = 'Dining';
-  2) If exactly one row is found, UPDATE categories SET budget = 5000 WHERE id = <that id>.
-- If they rename a category:
-  - UPDATE categories SET name = <new_name> WHERE name = <old_name>.
+    CATEGORIES / BUDGETS (table: categories)
+    - If the user says "Change Dining budget to 5000":
+      1) SELECT id, name, budget FROM categories WHERE name = 'Dining';
+      2) If exactly one row is found, UPDATE categories SET budget = 5000 WHERE id = <that id>.
+    - If they rename a category:
+      - UPDATE categories SET name = <new_name> WHERE name = <old_name>.
 
-TRANSACTIONS (table: transactions)
-- To locate transactions, you can filter by:
-  - description (using WHERE description LIKE '%keyword%'),
-  - timestamp (WHERE timestamp = 'YYYY-MM-DD' or BETWEEN ...),
-  - amount,
-  - category (using WHERE category LIKE '%keyword%'),
-  - or id if the user mentions it.
+    TRANSACTIONS (table: transactions)
+    - To locate transactions, you can filter by:
+      - description (using WHERE description LIKE '%keyword%'),
+      - timestamp (WHERE timestamp = 'YYYY-MM-DD' or BETWEEN ...),
+      - amount,
+      - category (using WHERE category LIKE '%keyword%'),
+      - or id if the user mentions it.
 
-- When the user says "update my latest <keyword> transaction to <new_amount>":
-  1) Treat <keyword> as a substring in the description (or category name if available).
-  2) Call read_sql_query_tool with a query like:
-     SELECT id, timestamp, description, amount, category
-     FROM transactions
-     WHERE description LIKE '%' || <keyword> || '%'
-     ORDER BY date DESC, id DESC
-     LIMIT 1;
-  3) If this returns exactly 1 row, construct an UPDATE:
-     UPDATE transactions
-     SET amount = <new_amount>
-     WHERE id = <that row's id>;
-     and call execute_sql_update_tool.
-  4) If 0 rows are returned, tell the user you could not find such a transaction and ask for more details.
-  5) If there are multiple "latest" candidates (e.g., if no date field exists), first show the top few matches
-     and ask the user to pick one.
+    - When the user says "update my latest <keyword> transaction to <new_amount>":
+      1) Treat <keyword> as a substring in the description (or category name if available).
+      2) Call read_sql_query_tool with a query like:
+         SELECT id, timestamp, description, amount, category
+         FROM transactions
+         WHERE description LIKE '%' || <keyword> || '%'
+         ORDER BY date DESC, id DESC
+         LIMIT 1;
+      3) If this returns exactly 1 row, construct an UPDATE:
+         UPDATE transactions
+         SET amount = <new_amount>
+         WHERE id = <that row's id>;
+         and call execute_sql_update_tool.
+      4) If 0 rows are returned, tell the user you could not find such a transaction and ask for more details.
+      5) If there are multiple "latest" candidates (e.g., if no date field exists), first show the top few matches
+         and ask the user to pick one.
 
-- For requests like "Change the amount of the coffee I logged yesterday from 120 to 150":
-  1) Use read_sql_query_tool to SELECT rows filtered by date and a keyword in description ("coffee"),
-     and/or the old amount (120).
-  2) If you find exactly one row, UPDATE that row's amount to 150.
-  3) If multiple rows match, show them and ask which one to update.
+    - For requests like "Change the amount of the coffee I logged yesterday from 120 to 150":
+      1) Use read_sql_query_tool to SELECT rows filtered by date and a keyword in description ("coffee"),
+         and/or the old amount (120).
+      2) If you find exactly one row, UPDATE that row's amount to 150.
+      3) If multiple rows match, show them and ask which one to update.
 
-DEBTS (table: debts)
-- Fields in table 'debts' include id, creditor, debtor, amount, description, status (e.g., 'settled' / 'unsettled').
-- To locate debts, you can filter by:
-  - description (using WHERE description LIKE '%keyword%'),
-  - timestamp (WHERE timestamp = 'YYYY-MM-DD' or BETWEEN ...),
-  - amount,
-  - category (using WHERE category LIKE '%keyword%'),
-  - status,
-  - or id if the user mentions it.
-- "Mark my debt to John for 200 as settled":
-  1) SELECT id, creditor, debtor, amount, description, status FROM debts
-     WHERE debtor = 'Me' AND creditor = 'John' AND amount = 200 AND status != 'settled';
-  2) If exactly one row is found, UPDATE debts SET status = 'settled' WHERE id = <that id>.
-- "Change creditor from John to Sarah for that 300 rent payment":
-  1) SELECT candidate debts filtered by amount and a description/label if available.
-  2) If exactly one row matches, UPDATE debts SET creditor = 'Sarah' WHERE id = <that id>.
+    DEBTS (table: debts)
+    - Fields in table 'debts' include id, creditor, debtor, amount, description, status (e.g., 'settled' / 'unsettled').
+    - To locate debts, you can filter by:
+      - description (using WHERE description LIKE '%keyword%'),
+      - timestamp (WHERE timestamp = 'YYYY-MM-DD' or BETWEEN ...),
+      - amount,
+      - category (using WHERE category LIKE '%keyword%'),
+      - status,
+      - or id if the user mentions it.
+    - "Mark my debt to John for 200 as settled":
+      1) SELECT id, creditor, debtor, amount, description, status FROM debts
+         WHERE debtor = 'Me' AND creditor = 'John' AND amount = 200 AND status != 'settled';
+      2) If exactly one row is found, UPDATE debts SET status = 'settled' WHERE id = <that id>.
+    - "Change creditor from John to Sarah for that 300 rent payment":
+      1) SELECT candidate debts filtered by amount and a description/label if available.
+      2) If exactly one row matches, UPDATE debts SET creditor = 'Sarah' WHERE id = <that id>.
 
-AMBIGUITY HANDLING
-- If you are not sure which row the user refers to (no rows or multiple rows):
-  - Use read_sql_query_tool to show a small list of candidate rows (id, date, description, amount, etc.).
-  - Ask the user to clarify (for example, by giving a date, id, or description snippet).
-- Never update multiple rows at once unless the user explicitly asks for a bulk change.
+    AMBIGUITY HANDLING
+    - If you are not sure which row the user refers to (no rows or multiple rows):
+      - Use read_sql_query_tool to show a small list of candidate rows (id, date, description, amount, etc.).
+      - Ask the user to clarify (for example, by giving a date, id, or description snippet).
+    - Never update multiple rows at once unless the user explicitly asks for a bulk change.
 """
 )
 
@@ -259,6 +263,7 @@ orchestrator_agent = Agent(
          - 'transactions' and 'categories' tables for spending/budget questions.
          - To answer questions like ‘whom do I have to pay?’ or ‘who has to pay me?’, ALWAYS call read_sql_query_tool with a SELECT on the 'debts' table (this tool does have access). Do not say that debts cannot be queried.
          - 'debts' table for debt summaries.
+       - NOTE: You do not need to filter by 'user_id' in your SQL queries. The system handles this automatically.
     3. Manage debts and splits:
        - When the user mentions words like "split", "owe", \"lent\", \"borrowed\", \"settle\", or \"who owes whom\",
          route the request to the SplitwiseManager tool.
@@ -285,14 +290,41 @@ orchestrator_agent = Agent(
     """
 )
 
-# --- RUNNER ---
-runner = InMemoryRunner(agent=orchestrator_agent, app_name="agents")
+# --- SESSION MANAGER (NEW) ---
 
-async def process_chat(message: str) -> str:
-    # run_debug returns a list of events
+class SessionManager:
+    """
+    Manages isolated Runner instances for different users.
+    Ensures User A's conversation history doesn't leak into User B's.
+    """
+    def __init__(self):
+        self.sessions = {} # Dictionary: user_id -> InMemoryRunner
+
+    def get_runner(self, user_id: str):
+        if user_id not in self.sessions:
+            # Create a new runner specific to this user
+            self.sessions[user_id] = InMemoryRunner(
+                agent=orchestrator_agent, 
+                app_name=f"agents_{user_id}"
+            )
+        return self.sessions[user_id]
+
+# Initialize the manager
+session_manager = SessionManager()
+
+# --- MODIFIED PROCESS_CHAT ---
+
+async def process_chat(user_id: str, message: str) -> str:
+    """
+    Processes a chat message for a specific user ID.
+    """
+    # 1. Retrieve the isolated runner for this user
+    runner = session_manager.get_runner(user_id)
+    
+    # 2. Run the agent (history is automatically handled by InMemoryRunner per instance)
     events = await runner.run_debug(message)
     
-    # Extract text from the last event that has it
+    # 3. Extract text from the response events
     for event in reversed(events):
         # Check for 'text' attribute directly
         if hasattr(event, "text") and event.text:

@@ -3,29 +3,31 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any
-from database import init_db, get_all_transactions, get_category_totals
+
+from database import init_db, get_user_transactions, get_user_category_totals
 from agents import process_chat
-import os
+from user_context import current_user_id # Import the context variable
 
 
-app = FastAPI(title="FrugalAgent API")
+app = FastAPI(title="FrugalAgent Multi-User API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with specific origin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize DB on startup
 @app.on_event("startup")
 def startup_event():
     init_db()
 
+# --- Request Models ---
 class ChatRequest(BaseModel):
+    user_id: str = Field(..., description="Unique ID of the user")
     message: str
 
 class ChatResponse(BaseModel):
@@ -37,23 +39,30 @@ def read_root():
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
+    # SET CONTEXT: This token ensures that down the line, 
+    # database.py knows which user_id is active.
+    token = current_user_id.set(request.user_id)
+    
     try:
-        response_text = await process_chat(request.message)
+        response_text = await process_chat(request.user_id, request.message)
         return {"response": response_text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up context
+        current_user_id.reset(token)
 
-@app.get("/transactions")
-def get_transactions_endpoint():
+@app.get("/transactions/{user_id}")
+def get_transactions_endpoint(user_id: str):
     try:
-        return get_all_transactions()
+        return get_user_transactions(user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/insights")
-def get_insights_endpoint():
+@app.get("/insights/{user_id}")
+def get_insights_endpoint(user_id: str):
     try:
-        return get_category_totals()
+        return get_user_category_totals(user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
