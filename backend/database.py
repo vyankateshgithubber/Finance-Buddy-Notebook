@@ -12,6 +12,7 @@ class Transaction(BaseModel):
     description: str
     amount: float
     category: str
+    transaction_type: str
     split_details: Optional[str] = None
 
 class Category(BaseModel):
@@ -42,7 +43,8 @@ def init_db():
                   description TEXT,
                   amount REAL,
                   category TEXT,
-                  split_details TEXT)''')
+                  split_details TEXT,
+                  transaction_type TEXT)''')
     
     c.execute('''CREATE TABLE IF NOT EXISTS categories
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,23 +78,27 @@ def read_sql_query_tool(query: str) -> str:
     
     To answer budget or transaction related questions, either join transactions.category with categories.name 
     and use SUM(amount) to compute spent and remaining or for transactions use table 'transactions' with columns: id, timestamp,
-    description, amount, category, split_details. for example :
+    description, amount, category, split_details, transaction_type. 
+    -transaction_type = 'debit' means money going out like (spending).
+    -transaction_type = 'credit' means money coming in like (income/refunds/etc.).
+    -for example :
     "How much did I spend on food?" or "List recent transactions" or "What is my Dining Budget and how much is left ?".
 
     To answer debt related questions for example :
     "Whom do I have to pay?" or "Who has to pay me?" or "who settled ?" etc
-    query table 'debts' with columns: id, debtor, creditor, amount, description, timestamp, status with appropriate filters 
+    query table 'detbs' with columns: id Id, debtor, creditor,amount ,description , timestamp , status with appropriate filters 
     on debtor and creditor and status. where for user ALWAYS use 'Me' in creditor or debtor according to question and for status
     use 'unsettled' for open or unsettled debts/transcations and 'settled' for settled debts/transactions
     
     Args: 
         query: A valid SQL SELECT statement.
     """
+    import sqlite3
     try:
         if not query.strip().upper().startswith("SELECT"):
             return "ERROR: Only SELECT queries are allowed."
             
-        conn = get_db_connection()
+        conn = sqlite3.connect("expense.db")
         c = conn.cursor()
         c.execute(query)
         rows = c.fetchall()
@@ -107,6 +113,7 @@ def read_sql_query_tool(query: str) -> str:
     except Exception as e:
         return f"ERROR: Query failed. {str(e)}"
 
+
 def execute_sql_update_tool(query: str, params: dict={}) -> dict:
     conn = get_db_connection()
     cur = conn.cursor()
@@ -116,7 +123,8 @@ def execute_sql_update_tool(query: str, params: dict={}) -> dict:
     conn.close()
     return {"rows_affected": rows_affected}
 
-def save_transaction_tool(description: str, amount: float, category: str, split_details: str = "None") -> str:
+
+def save_transaction_tool(description: str, amount: float, category: str, transaction_type: str,split_details: str = "None") -> str:
     """
     Saves a validated transaction to the persistent SQLite database.
     
@@ -125,7 +133,7 @@ def save_transaction_tool(description: str, amount: float, category: str, split_
         amount: The cost as a float (e.g., 5.50).
         category: The category determined by the Classifier (e.g., "Dining").
         split_details: (Optional) Text describing who owes what (e.g., "Bob owes $2.75").
-    
+        transaction_type: debit if user is paying or lending money (losing money), credit if user is receiving money (earning money).
     Returns:
         A success message with the Transaction ID.
     """
@@ -136,7 +144,7 @@ def save_transaction_tool(description: str, amount: float, category: str, split_
         return "ERROR: Category is missing. Please categorize before saving."
 
     try:
-        conn = get_db_connection()
+        conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
         
         # Check budget
@@ -144,21 +152,21 @@ def save_transaction_tool(description: str, amount: float, category: str, split_
         row = c.fetchone()
         budget_msg = ""
         if row:
-            budget = row['budget']
+            budget = row[0]
             c.execute("SELECT SUM(amount) FROM transactions WHERE category = ?", (category,))
-            result = c.fetchone()
-            spent = result[0] if result[0] else 0
+            spent = c.fetchone()[0] or 0
             if spent + float(amount) > budget:
                 budget_msg = f" WARNING: You have exceeded your {category} budget of ${budget}!"
         
-        c.execute("INSERT INTO transactions (timestamp, description, amount, category, split_details) VALUES (?, ?, ?, ?, ?)",
-                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description, float(amount), category, split_details))
+        c.execute("INSERT INTO transactions (timestamp, description, amount, category, split_details, transaction_type) VALUES (?, ?, ?, ?, ?,?)",
+                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description, float(amount), category, split_details, transaction_type))
         trans_id = c.lastrowid
         conn.commit()
         conn.close()
         return f"SUCCESS: Transaction #{trans_id} saved. {description} - ${amount} ({category}).{budget_msg}"
     except Exception as e:
             return f"ERROR: Failed to save transaction. {str(e)}"
+
 
 def add_debt_tool(debtor: str, creditor: str, amount: float,
                   description: str, status: str) -> str:
@@ -368,7 +376,7 @@ def get_dashboard_stats() -> Dict[str, float]:
     # 1. Total Spent (All time for now, ideally current month)
     # For simplicity, let's just sum all transactions. 
     # To do current month: WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
-    c.execute("SELECT SUM(amount) FROM transactions")
+    c.execute("SELECT SUM(amount) FROM transactions") #change according to debit and credit status
     result = c.fetchone()
     total_spent = result[0] if result[0] else 0.0
     
