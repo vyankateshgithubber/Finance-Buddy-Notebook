@@ -3,7 +3,6 @@ import axios from 'axios';
 import { Clock, DollarSign, Tag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge" // We might need to install badge, but let's use standard div for now if not installed
 
 interface Transaction {
     id: number;
