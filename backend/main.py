@@ -56,7 +56,3 @@ def get_insights_endpoint():
         return get_category_totals()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app)
