@@ -21,9 +21,9 @@ app.add_middleware(
 )
 
 # Initialize DB on startup
-@app.on_event("startup")
-def startup_event():
-    init_db()
+#@app.on_event("startup")
+#def startup_event():
+#    init_db()
 
 class ChatRequest(BaseModel):
     message: str
