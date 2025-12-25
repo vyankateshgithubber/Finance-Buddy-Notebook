@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -17,7 +17,7 @@ export function Dashboard({ refreshTrigger }: { refreshTrigger: number }) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/insights');
+                const res = await api.get('/insights');
                 setData(res.data);
             } catch (error) {
                 console.error("Error fetching insights:", error);

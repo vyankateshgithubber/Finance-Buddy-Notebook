@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import { Clock, DollarSign, Tag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,7 +19,7 @@ export function TransactionList({ refreshTrigger }: { refreshTrigger: number }) 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/transactions');
+                const res = await api.get('/transactions');
                 setTransactions(res.data);
             } catch (error) {
                 console.error("Error fetching transactions:", error);

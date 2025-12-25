@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import { Send, Bot, User } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,7 +43,7 @@ export function ChatInterface({ onTransactionUpdate }: { onTransactionUpdate: ()
         setLoading(true);
 
         try {
-            const res = await axios.post('http://localhost:8000/chat', { message: userMsg });
+            const res = await api.post('/chat', { message: userMsg });
             setMessages(prev => [...prev, { role: 'bot', content: res.data.response }]);
             onTransactionUpdate();
         } catch (error) {
