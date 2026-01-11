@@ -4,3 +4,5 @@ pydantic
 google-adk
 google-genai
 python-dotenv
+supabase
+psycopg2-binary
