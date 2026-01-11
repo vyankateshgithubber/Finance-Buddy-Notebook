@@ -37,13 +37,13 @@ def main():
     
     # 1. Add Expense
     print("\n--- Test 1: Add Expense ---")
-    send_message("I spent $25 on Lunch at Subway")
+    send_message("I spent 250/- on Lunch at Subway")
     time.sleep(2)
     verify_db("SELECT * FROM transactions ORDER BY id DESC LIMIT 1")
 
     # 2. Split Expense
     print("\n--- Test 2: Split Expense ---")
-    send_message("I paid 300 for dinner for Me, John and Sarah split equally")
+    send_message("I paid 300/- for dinner for Me, John and Sarah split equally")
     time.sleep(2)
     verify_db("SELECT * FROM debts ORDER BY id DESC LIMIT 3")
 

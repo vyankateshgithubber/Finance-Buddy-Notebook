@@ -15,6 +15,10 @@ interface Transaction {
 
 export function TransactionList({ refreshTrigger }: { refreshTrigger: number }) {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("all");
+    const [categories, setCategories] = useState<string[]>([]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -28,33 +32,85 @@ export function TransactionList({ refreshTrigger }: { refreshTrigger: number }) 
         fetchData();
     }, [refreshTrigger]);
 
+    useEffect(() => {
+        let result = transactions;
+
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(t =>
+                t.description.toLowerCase().includes(query) ||
+                t.category.toLowerCase().includes(query)
+            );
+        }
+
+        if (categoryFilter && categoryFilter !== "all") {
+            result = result.filter(t => t.category === categoryFilter);
+        }
+
+        setFilteredTransactions(result);
+    }, [searchQuery, categoryFilter, transactions]);
+
+    const getInitials = (name: string) => {
+        return name.substring(0, 2).toUpperCase();
+    }
+
     return (
-        <Card className="h-full flex flex-col shadow-md border-0 overflow-hidden">
-            <CardHeader className="pb-2 bg-muted/30">
-                <CardTitle className="text-lg font-semibold">Recent Transactions</CardTitle>
+        <Card className="col-span-3 h-full flex flex-col">
+            <CardHeader>
+                <CardTitle>Recent Transactions</CardTitle>
+                <CardDescription>
+                    You made {filteredTransactions.length} transactions this month.
+                </CardDescription>
+                <div className="flex gap-2 mt-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search..."
+                            className="pl-9 h-9 bg-muted/50"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="w-[130px] h-9 bg-muted/50">
+                            <div className="flex items-center gap-2">
+                                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="Category" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All</SelectItem>
+                            {categories.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </CardHeader>
-            <CardContent className="flex-1 p-0 overflow-hidden">
-                <ScrollArea className="h-full p-4">
-                    <div className="space-y-3">
-                        {transactions.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-8">No transactions yet.</p>
+            <CardContent className="flex-1 overflow-hidden p-0">
+                <ScrollArea className="h-[400px] px-6">
+                    <div className="space-y-8 pb-6">
+                        {filteredTransactions.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground space-y-2">
+                                <Search className="h-8 w-8 opacity-20" />
+                                <p>No transactions found.</p>
+                            </div>
                         ) : (
-                            transactions.map((t) => (
-                                <div key={t.id} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg border transition-colors group">
-                                    <div className="flex flex-col gap-1">
-                                        <span className="font-medium text-foreground">{t.description}</span>
-                                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                            <span className="flex items-center gap-1">
-                                                <Clock size={12} /> {t.timestamp}
-                                            </span>
-                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
-                                                <Tag size={12} /> {t.category}
-                                            </span>
-                                        </div>
+                            filteredTransactions.map((t) => (
+                                <div key={t.id} className="flex items-center">
+                                    <Avatar className="h-9 w-9">
+                                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
+                                            {getInitials(t.category)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <div className="ml-4 space-y-1">
+                                        <p className="text-sm font-medium leading-none">{t.description}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t.category} • {t.timestamp}
+                                        </p>
                                     </div>
-                                    <div className="font-bold text-foreground flex items-center">
-                                        <DollarSign size={14} className="text-muted-foreground" />
-                                        {t.amount.toFixed(2)}
+                                    <div className="ml-auto font-medium">
+                                        -${t.amount.toFixed(2)}
                                     </div>
                                 </div>
                             ))

@@ -9,7 +9,15 @@ interface CategoryTotal {
     [key: string]: string | number;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+// Define a palette of colors for dynamic categories
+const CHART_COLORS = [
+    "hsl(var(--chart-1))",
+    "hsl(var(--chart-2))",
+    "hsl(var(--chart-3))",
+    "hsl(var(--chart-4))",
+    "hsl(var(--chart-5))",
+    "hsl(var(--chart-1))", // Repeat if necessary or add more
+];
 
 export function Dashboard({ refreshTrigger }: { refreshTrigger: number }) {
     const [data, setData] = useState<CategoryTotal[]>([]);
@@ -26,41 +34,94 @@ export function Dashboard({ refreshTrigger }: { refreshTrigger: number }) {
         fetchData();
     }, [refreshTrigger]);
 
+    const totalSpent = useMemo(() => {
+        return data.reduce((acc, curr) => acc + curr.total, 0);
+    }, [data]);
+
+    // Dynamically generate chart config based on data
+    const chartConfig = useMemo(() => {
+        const config: ChartConfig = {
+            total: {
+                label: "Total Spent",
+            },
+        };
+        data.forEach((item, index) => {
+            config[item.category] = {
+                label: item.category,
+                color: item.fill || CHART_COLORS[index % CHART_COLORS.length],
+            };
+        });
+        return config;
+    }, [data]);
+
     return (
-        <Card className="h-full shadow-md border-0">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-semibold">Spending by Category</CardTitle>
+        <Card className="flex flex-col h-full shadow-md border-0 bg-card/50">
+            <CardHeader className="items-center pb-0">
+                <CardTitle>Spending by Category</CardTitle>
+                <CardDescription>Current Month</CardDescription>
             </CardHeader>
-            <CardContent className="h-[calc(100%-4rem)]">
+            <CardContent className="flex-1 pb-0">
                 {data.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-muted-foreground">
                         No data available
                     </div>
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer
+                        config={chartConfig}
+                        className="mx-auto aspect-square max-h-[300px]"
+                    >
                         <PieChart>
+                            <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent hideLabel />}
+                            />
                             <Pie
                                 data={data}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
                                 dataKey="total"
+                                nameKey="category"
+                                innerRadius={60}
+                                strokeWidth={5}
                             >
-                                {data.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
+                                <Label
+                                    content={({ viewBox }) => {
+                                        if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                            return (
+                                                <text
+                                                    x={viewBox.cx}
+                                                    y={viewBox.cy}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                >
+                                                    <tspan
+                                                        x={viewBox.cx}
+                                                        y={viewBox.cy}
+                                                        className="fill-foreground text-3xl font-bold"
+                                                    >
+                                                        ${totalSpent.toLocaleString()}
+                                                    </tspan>
+                                                    <tspan
+                                                        x={viewBox.cx}
+                                                        y={(viewBox.cy || 0) + 24}
+                                                        className="fill-muted-foreground"
+                                                    >
+                                                        Total
+                                                    </tspan>
+                                                </text>
+                                            )
+                                        }
+                                    }}
+                                />
                             </Pie>
-                            <Tooltip
-                                formatter={(value: number) => `$${value.toFixed(2)}`}
-                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            />
-                            <Legend verticalAlign="bottom" height={36} />
+                            <ChartLegend content={<ChartLegendContent nameKey="category" />} className="-translate-y-2 flex-wrap gap-2 [&>*]:basis-1/4 [&>*]:justify-center" />
                         </PieChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                 )}
             </CardContent>
+            <CardFooter className="flex-col gap-2 text-sm">
+                <div className="leading-none text-muted-foreground">
+                    Showing total spending for the current period
+                </div>
+            </CardFooter>
         </Card>
     );
 }

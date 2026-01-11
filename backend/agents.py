@@ -118,6 +118,7 @@ splitwise_agent = Agent(
         
         Important:
         - ALWAYS ensure 'Me' is part of creditors or debtors; only record debts where 'Me' is debtor or creditor.
+        - If the user does not specify who paid, assume 'Me' paid.
         - Never create debts between two other people (e.g., Bob ↔ John) if 'Me' is not in that pair.
         
         Answering questions with read_sql_query_tool:

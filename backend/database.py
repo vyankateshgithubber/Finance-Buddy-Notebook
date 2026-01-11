@@ -281,9 +281,17 @@ def record_group_debts(
     """
     ME_NAME = "Me"
     
-    # 1) Parse lists
-    creditor_list = [c.strip() for c in creditors.split(",") if c.strip()]
-    debtor_list = [d.strip() for d in debtors.split(",") if d.strip()]
+    # 1) Parse lists and normalize "me" -> "Me"
+    def normalize_name(n):
+        return ME_NAME if n.lower() == "me" else n
+
+    creditor_list = [normalize_name(c.strip()) for c in creditors.split(",") if c.strip()]
+    debtor_list = [normalize_name(d.strip()) for d in debtors.split(",") if d.strip()]
+    
+    # Default to Me as creditor if none specified (common in "split bill" context)
+    if not creditor_list:
+        creditor_list = [ME_NAME]
+
     participants = sorted(set(creditor_list + debtor_list))
 
     if ME_NAME not in participants:
@@ -401,3 +409,34 @@ def get_category_totals() -> List[Dict]:
         return rows
     except Exception:
         return []
+
+def get_dashboard_stats() -> Dict[str, float]:
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # 1. Total Spent (All time for now, ideally current month)
+    # For simplicity, let's just sum all transactions. 
+    # To do current month: WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
+    c.execute("SELECT SUM(amount) FROM transactions")
+    result = c.fetchone()
+    total_spent = result[0] if result[0] else 0.0
+    
+    # 2. Total Budget
+    c.execute("SELECT SUM(budget) FROM categories")
+    result = c.fetchone()
+    total_budget = result[0] if result[0] else 0.0
+    
+    # 3. Active Debts (Money owed TO Me)
+    # creditor = 'Me' AND status = 'unsettled'
+    c.execute("SELECT SUM(amount) FROM debts WHERE creditor = 'Me' AND status = 'unsettled'")
+    result = c.fetchone()
+    active_debts = result[0] if result[0] else 0.0
+    
+    conn.close()
+    
+    return {
+        "total_spent": total_spent,
+        "budget": total_budget,
+        "remaining": total_budget - total_spent,
+        "active_debts": active_debts
+    }
