@@ -55,7 +55,14 @@ This project consists of a Python FastAPI backend and a Next.js frontend.
    yarn install
    ```
 
-3. Run the development server:
+3. Configure Environment Variables:
+   Create a file named `.env.local` in the `frontend` directory and add your Supabase credentials:
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=your-project-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+4. Run the development server:
    ```bash
    npm run dev
    # or
