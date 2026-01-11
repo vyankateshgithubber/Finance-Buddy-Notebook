@@ -90,7 +90,3 @@ def get_stats_endpoint():
     except Exception as e:
         logger.error(f"Error in get_stats_endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

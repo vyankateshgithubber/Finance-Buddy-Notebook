@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Send, Plus, Split, BarChart3, Bot, User, Sparkles } from "lucide-react"
+import { Send, Plus, Split, BarChart3, Bot, User } from "lucide-react"
+import { api } from '@/lib/api';
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -51,15 +52,8 @@ export function Chat({ onTransactionComplete }: ChatProps) {
         setIsLoading(true)
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: userMessage.content }),
-            })
-
-            if (!response.ok) throw new Error("Failed to fetch response")
-
-            const data = await response.json()
+            const res = await api.post('/chat', { message: userMessage.content })
+            const data = res.data
             const botMessage: Message = { role: "assistant", content: data.response }
             setMessages(prev => [...prev, botMessage])
 

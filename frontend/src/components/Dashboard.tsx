@@ -1,22 +1,12 @@
-"use client"
-
-import React, { useEffect, useState, useMemo } from 'react';
-import axios from 'axios';
-import { PieChart, Pie, Cell, Label } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-    ChartLegend,
-    ChartLegendContent,
-    type ChartConfig,
-} from "@/components/ui/chart"
+import React, { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface CategoryTotal {
     category: string;
     total: number;
-    fill?: string;
+    [key: string]: string | number;
 }
 
 // Define a palette of colors for dynamic categories
@@ -35,13 +25,8 @@ export function Dashboard({ refreshTrigger }: { refreshTrigger: number }) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/insights');
-                // Assign colors to data
-                const processedData = res.data.map((item: any, index: number) => ({
-                    ...item,
-                    fill: CHART_COLORS[index % CHART_COLORS.length]
-                }));
-                setData(processedData);
+                const res = await api.get('/insights');
+                setData(res.data);
             } catch (error) {
                 console.error("Error fetching insights:", error);
             }

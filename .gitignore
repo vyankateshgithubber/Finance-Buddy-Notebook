@@ -67,3 +67,7 @@ build/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.venv/bin/normalizer

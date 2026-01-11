@@ -1,12 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Search, Filter } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { api } from '@/lib/api';
+import { Clock, DollarSign, Tag } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-
 
 interface Transaction {
     id: number;
@@ -27,14 +23,8 @@ export function TransactionList({ refreshTrigger }: { refreshTrigger: number }) 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/transactions');
-                const data: Transaction[] = res.data;
-                setTransactions(data);
-                setFilteredTransactions(data);
-
-                // Extract unique categories
-                const uniqueCategories = Array.from(new Set(data.map(t => t.category)));
-                setCategories(uniqueCategories);
+                const res = await api.get('/transactions');
+                setTransactions(res.data);
             } catch (error) {
                 console.error("Error fetching transactions:", error);
             }

@@ -1,10 +1,22 @@
-import sqlite3
+import os
+import json
+import requests
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from collections import defaultdict
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DB_FILE = "expense.db"
+
+# Environment for DB (Supabase REST)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+DB_ENGINE: Optional[str] = "supabase"
+
 
 class Transaction(BaseModel):
     id: int
@@ -14,10 +26,12 @@ class Transaction(BaseModel):
     category: str
     split_details: Optional[str] = None
 
+
 class Category(BaseModel):
     id: int
     name: str
     budget: float
+
 
 class Debt(BaseModel):
     id: int
@@ -28,168 +42,205 @@ class Debt(BaseModel):
     timestamp: str
     status: str
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
 
+# --- Supabase REST helpers ---
+def _supabase_headers() -> Dict[str, str]:
+    if not SUPABASE_KEY:
+        raise RuntimeError("SUPABASE_KEY not set")
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def supabase_get(table: str, params: str = "select=*") -> list:
+    if not SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    r = requests.get(url, headers=_supabase_headers())
+    r.raise_for_status()
+    return r.json()
+
+
+def supabase_insert(table: str, record) -> list:
+    if not SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    r = requests.post(url, headers={**_supabase_headers(), "Prefer": "return=representation"}, data=json.dumps(record))
+    r.raise_for_status()
+    return r.json()
+
+
+def supabase_update(table: str, filters: str, record: dict) -> list:
+    if not SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{filters}"
+    r = requests.patch(url, headers={**_supabase_headers(), "Prefer": "return=representation"}, data=json.dumps(record))
+    r.raise_for_status()
+    return r.json()
+
+
+# --- Connection selection ---
+def get_db_connection():
+    """Supabase REST only: no direct DB connection.
+
+    This function exists for compatibility but will raise if called.
+    Use the Supabase REST helpers instead.
+    """
+    raise RuntimeError("Supabase REST only - no DB connection available. Use Supabase helpers.")
+
+
+# --- Initialization ---
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  timestamp TEXT,
-                  description TEXT,
-                  amount REAL,
-                  category TEXT,
-                  split_details TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS categories
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT UNIQUE,
-                  budget REAL)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS debts
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  debtor TEXT,
-                  creditor TEXT,
-                  amount REAL,
-                  description TEXT,
-                  timestamp TEXT,
-                  status TEXT)''')
-    
-    c.execute("SELECT count(*) FROM categories")
-    if c.fetchone()[0] == 0:
-        defaults = [('Dining', 200), ('Groceries', 300), ('Transport', 100), 
-                    ('Entertainment', 150), ('Shopping', 200), ('Bills', 500), ('Others', 100)]
-        c.executemany("INSERT INTO categories (name, budget) VALUES (?, ?)", defaults)
-        
-    conn.commit()
-    conn.close()
+    # Supabase-only initialization: ensure category exist
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set for Supabase-only mode.")
+
+    try:
+        cats = supabase_get("category", "select=id")
+        if not cats:
+            defaults = [{"name": n, "budget": b} for (n, b) in [
+                ("Dining", 200), ("Groceries", 300), ("Transport", 100),
+                ("Entertainment", 150), ("Shopping", 200), ("Bills", 500), ("Others", 100)
+            ]]
+            supabase_insert("category", defaults)
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize Supabase tables: {e}")
+
 
 # --- Tools from Notebook ---
-
 def read_sql_query_tool(query: str) -> str:
-    """
-    Executes a READ-ONLY SQL query on the expense database.
-    Useful for answering questions 
-    
-    To answer budget or transaction related questions, either join transactions.category with categories.name 
-    and use SUM(amount) to compute spent and remaining or for transactions use table 'transactions' with columns: id, timestamp,
-    description, amount, category, split_details. for example :
-    "How much did I spend on food?" or "List recent transactions" or "What is my Dining Budget and how much is left ?".
-
-    To answer debt related questions for example :
-    "Whom do I have to pay?" or "Who has to pay me?" or "who settled ?" etc
-    query table 'debts' with columns: id, debtor, creditor, amount, description, timestamp, status with appropriate filters 
-    on debtor and creditor and status. where for user ALWAYS use 'Me' in creditor or debtor according to question and for status
-    use 'unsettled' for open or unsettled debts/transcations and 'settled' for settled debts/transactions
-    
-    Args: 
-        query: A valid SQL SELECT statement.
-    """
     try:
         if not query.strip().upper().startswith("SELECT"):
             return "ERROR: Only SELECT queries are allowed."
-            
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute(query)
-        rows = c.fetchall()
-        columns = [description[0] for description in c.description]
-        conn.close()
-        
-        if not rows:
-            return "No results found."
-            
-        result = [dict(zip(columns, row)) for row in rows]
-        return str(result)
+
+        # Supabase simple SELECT support
+        if DB_ENGINE == "supabase":
+            q = query.strip()
+            lower = q.lower()
+            import re
+            m = re.search(r"from\s+([a-zA-Z_][a-zA-Z0-9_]*)", lower)
+            if not m:
+                return "ERROR: Unsupported SELECT for Supabase"
+            table = m.group(1)
+            # simple where -> convert
+            wm = re.search(r"where\s+(.+)$", lower)
+            params = "select=*"
+            if wm:
+                clause = wm.group(1).strip()
+                # support patterns like "id = 123" or "debtor = 'Me'"
+                eq = re.search(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*('?)([^'\s]+)\2", clause)
+                if eq:
+                    col, _, val = eq.groups()
+                    params = f"select=*&{col}=eq.{val}"
+            try:
+                rows = supabase_get(table, params)
+                return str(rows if rows else "No results found.")
+            except Exception as e:
+                return f"ERROR: Supabase query failed. {e}"
+
+        # Supabase-only: translate simple SELECTs to REST
+        try:
+            rows = supabase_get(table, params)
+            return str(rows if rows else "No results found.")
+        except Exception as e:
+            return f"ERROR: Supabase query failed. {e}"
     except Exception as e:
         return f"ERROR: Query failed. {str(e)}"
 
-def execute_sql_update_tool(query: str, params: dict={}) -> dict:
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(query, params or {})
-    conn.commit()
-    rows_affected = cur.rowcount
-    conn.close()
-    return {"rows_affected": rows_affected}
+
+def execute_sql_update_tool(query: str, params: dict = {}) -> dict:
+    # Supabase-only update helper.
+    # Expects `params` to contain: {"table": "<table>", "filters": "<filters>", "record": {...}}
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"rows_affected": 0, "error": "Supabase not configured."}
+
+    table = params.get("table")
+    filters = params.get("filters")
+    record = params.get("record")
+    if not table or not filters or not isinstance(record, dict):
+        return {"rows_affected": 0, "error": "Invalid params. Provide 'table', 'filters', and 'record' in params."}
+
+    try:
+        res = supabase_update(table, filters, record)
+        # supabase returns updated rows when Prefer=return=representation; count them if list
+        count = len(res) if isinstance(res, list) else 0
+        return {"rows_affected": count}
+    except Exception as e:
+        return {"rows_affected": 0, "error": str(e)}
+
 
 def save_transaction_tool(description: str, amount: float, category: str, split_details: str = "None") -> str:
-    """
-    Saves a validated transaction to the persistent SQLite database.
-    
-    Args:
-        description: What was bought (e.g., "Starbucks Coffee").
-        amount: The cost as a float (e.g., 5.50).
-        category: The category determined by the Classifier (e.g., "Dining").
-        split_details: (Optional) Text describing who owes what (e.g., "Bob owes $2.75").
-    
-    Returns:
-        A success message with the Transaction ID.
-    """
     if amount <= 0:
         return "ERROR: Amount must be positive."
-    
     if not category or category == "Unknown":
         return "ERROR: Category is missing. Please categorize before saving."
 
     try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        # Check budget
-        c.execute("SELECT budget FROM categories WHERE name = ?", (category,))
-        row = c.fetchone()
-        budget_msg = ""
-        if row:
-            budget = row['budget']
-            c.execute("SELECT SUM(amount) FROM transactions WHERE category = ?", (category,))
-            result = c.fetchone()
-            spent = result[0] if result[0] else 0
-            if spent + float(amount) > budget:
-                budget_msg = f" WARNING: You have exceeded your {category} budget of ${budget}!"
-        
-        c.execute("INSERT INTO transactions (timestamp, description, amount, category, split_details) VALUES (?, ?, ?, ?, ?)",
-                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), description, float(amount), category, split_details))
-        trans_id = c.lastrowid
-        conn.commit()
+        # Supabase-only flow
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            return "ERROR: Supabase not configured. Set SUPABASE_URL and SUPABASE_KEY."
+
+        try:
+            cats = supabase_get("category", f"select=budget,name&name=eq.{category}")
+            if cats:
+                budget = float(cats[0].get("budget", 0))
+                spent_rows = supabase_get("transaction", f"select=sum(amount)&category=eq.{category}")
+                spent = float(spent_rows[0].get("sum", 0)) if spent_rows and isinstance(spent_rows, list) and spent_rows[0].get("sum") is not None else 0
+                if spent + float(amount) > budget:
+                    budget_msg = f" WARNING: You have exceeded your {category} budget of ${budget}!"
+        except Exception:
+            pass
+
+        rec = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "description": description,
+            "amount": float(amount),
+            "category": category,
+            "split_details": split_details,
+        }
+        try:
+            created = supabase_insert("transaction", rec)
+            trans_id = created[0].get("id") if created and isinstance(created, list) else None
+            return f"SUCCESS: Transaction #{trans_id or ''} saved. {description} - ${amount} ({category}).{budget_msg}"
+        except Exception as e:
+            return f"ERROR: Failed to save transaction to Supabase. {e}"
         conn.close()
         return f"SUCCESS: Transaction #{trans_id} saved. {description} - ${amount} ({category}).{budget_msg}"
+
     except Exception as e:
-            return f"ERROR: Failed to save transaction. {str(e)}"
+        return f"ERROR: Failed to save transaction. {str(e)}"
+
 
 def add_debt_tool(debtor: str, creditor: str, amount: float,
                   description: str, status: str) -> str:
-    """
-    Low-level tool: record a SINGLE one-to-one debt row.
-
-    Args:
-        debtor: Person who owes money.
-        creditor: Person who is owed money.
-        amount: Amount owed.
-        description: What the debt is for.
-        status: "unsettled" or "settled".
-    """
     if amount <= 0:
         return "ERROR: Amount must be positive."
 
     try:
-        conn = get_db_connection()
-        c = conn.cursor()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        c.execute(
-            "INSERT INTO debts (debtor, creditor, amount, description, status, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (debtor.strip(), creditor.strip(), float(amount), description, status, now)
-        )
-        conn.commit()
-        conn.close()
-        return f"SUCCESS: Recorded that {debtor} owes {creditor} {amount} for {description} ({status})."
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            return "ERROR: Supabase not configured. Set SUPABASE_URL and SUPABASE_KEY."
+
+        drec = {
+            "debtor": debtor.strip(),
+            "creditor": creditor.strip(),
+            "amount": float(amount),
+            "description": description,
+            "status": status,
+            "timestamp": now,
+        }
+        try:
+            supabase_insert("debt", drec)
+            return f"SUCCESS: Recorded that {debtor} owes {creditor} {amount} for {description} ({status})."
+        except Exception as e:
+            return f"ERROR: Failed to record debt to Supabase. {e}"
+
     except Exception as e:
         return f"ERROR: Failed to record debt. {str(e)}"
+    
 
 def record_group_debts(
     creditors: str,
@@ -346,20 +397,18 @@ def record_group_debts(
 # --- Helper functions for API ---
 
 def get_all_transactions() -> List[Dict]:
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM transactions ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    try:
+        rows = supabase_get('transaction', 'select=*&order=id.desc')
+        return rows
+    except Exception:
+        return []
 
 def get_category_totals() -> List[Dict]:
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT category, SUM(amount) as total FROM transactions GROUP BY category")
-    rows = c.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    try:
+        rows = supabase_get('transaction', 'select=category,sum(amount)::numeric as total&group=category')
+        return rows
+    except Exception:
+        return []
 
 def get_dashboard_stats() -> Dict[str, float]:
     conn = get_db_connection()
