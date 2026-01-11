@@ -411,32 +411,33 @@ def get_category_totals() -> List[Dict]:
         return []
 
 def get_dashboard_stats() -> Dict[str, float]:
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    # 1. Total Spent (All time for now, ideally current month)
-    # For simplicity, let's just sum all transactions. 
-    # To do current month: WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
-    c.execute("SELECT SUM(amount) FROM transactions")
-    result = c.fetchone()
-    total_spent = result[0] if result[0] else 0.0
-    
-    # 2. Total Budget
-    c.execute("SELECT SUM(budget) FROM categories")
-    result = c.fetchone()
-    total_budget = result[0] if result[0] else 0.0
-    
-    # 3. Active Debts (Money owed TO Me)
-    # creditor = 'Me' AND status = 'unsettled'
-    c.execute("SELECT SUM(amount) FROM debts WHERE creditor = 'Me' AND status = 'unsettled'")
-    result = c.fetchone()
-    active_debts = result[0] if result[0] else 0.0
-    
-    conn.close()
-    
-    return {
-        "total_spent": total_spent,
-        "budget": total_budget,
-        "remaining": total_budget - total_spent,
-        "active_debts": active_debts
-    }
+    try:
+        # 1. Total Spent (All time for now, ideally current month)
+        # For simplicity, let's just sum all transactions.
+        # To do current month: add filter on timestamp
+        spent_rows = supabase_get('transaction', 'select=sum(amount)')
+        total_spent = float(spent_rows[0].get('sum', 0)) if spent_rows and spent_rows[0].get('sum') is not None else 0.0
+        
+        # 2. Total Budget
+        budget_rows = supabase_get('category', 'select=sum(budget)')
+        total_budget = float(budget_rows[0].get('sum', 0)) if budget_rows and budget_rows[0].get('sum') is not None else 0.0
+        
+        # 3. Active Debts (Money owed TO Me)
+        # creditor = 'Me' AND status = 'unsettled'
+        debt_rows = supabase_get('debt', 'select=sum(amount)&creditor=eq.Me&status=eq.unsettled')
+        active_debts = float(debt_rows[0].get('sum', 0)) if debt_rows and debt_rows[0].get('sum') is not None else 0.0
+        
+        return {
+            "total_spent": total_spent,
+            "budget": total_budget,
+            "remaining": total_budget - total_spent,
+            "active_debts": active_debts
+        }
+    except Exception as e:
+        # In case of error, return zeros
+        return {
+            "total_spent": 0.0,
+            "budget": 0.0,
+            "remaining": 0.0,
+            "active_debts": 0.0
+        }
