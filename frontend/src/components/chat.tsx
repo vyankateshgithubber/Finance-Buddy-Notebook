@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Send, Plus, Split, BarChart3, Bot, User } from "lucide-react"
+import { Send, Plus, Split, BarChart3, Bot, User, Sparkles } from "lucide-react"
 import { api } from '@/lib/api';
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"

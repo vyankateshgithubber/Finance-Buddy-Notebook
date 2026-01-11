@@ -5,6 +5,7 @@ import { TransactionList } from './TransactionList';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DollarSign, CreditCard, Activity, Wallet } from 'lucide-react';
+import { api } from '@/lib/api';
 
 interface DashboardStats {
     total_spent: number;
@@ -24,7 +25,7 @@ export function DashboardView({ refreshTrigger }: { refreshTrigger: number }) {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/stats');
+                const res = await api.get('stats');
                 setStats(res.data);
             } catch (error) {
                 console.error("Error fetching stats:", error);

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '@/lib/api';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, Label } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from "@/components/ui/chart"
 
 interface CategoryTotal {
     category: string;
@@ -43,12 +44,13 @@ export function Dashboard({ refreshTrigger }: { refreshTrigger: number }) {
         const config: ChartConfig = {
             total: {
                 label: "Total Spent",
+                color: "hsl(var(--chart-1))",
             },
         };
         data.forEach((item, index) => {
             config[item.category] = {
                 label: item.category,
-                color: item.fill || CHART_COLORS[index % CHART_COLORS.length],
+                color: CHART_COLORS[index % CHART_COLORS.length],
             };
         });
         return config;

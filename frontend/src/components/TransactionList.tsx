@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Clock, DollarSign, Tag } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Clock, DollarSign, Filter, Search, Tag } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Input } from "@/components/ui/input"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface Transaction {
     id: number;
